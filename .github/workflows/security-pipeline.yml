@@ -92,3 +92,15 @@ jobs:
           image-ref: nodegoat:ci
           severity: CRITICAL,HIGH
           exit-code: '1'
+
+  vault-test:
+    runs-on: self-hosted
+
+    steps:
+      - name: Check Vault connectivity
+        env:
+          VAULT_ADDR: http://127.0.0.1:8200
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+        run: |
+          vault status
+          vault kv get secret/nodegoat
