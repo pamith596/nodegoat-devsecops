@@ -93,20 +93,83 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: '1'
 
-  vault-test:
-    runs-on: self-hosted
-    steps:
-      - name: Test persistent Vault
-        env:
-          VAULT_ADDR: http://127.0.0.1:8200
-          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
-        run: |
-          echo "Checking Vault..."
-          vault status
-          echo "Checking CI token..."
-          vault token lookup
-          echo "Checking secret access..."
-          vault kv get -field=cookie_secret secret/nodegoat > /tmp/test-secret
-          test -s /tmp/test-secret
-          rm -f /tmp/test-secret
-          echo "Vault integration successful."
+  vault-dast:
+  runs-on: self-hosted
+
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Load secrets from Vault
+      env:
+        VAULT_ADDR: http://127.0.0.1:8200
+        VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+      run: |
+        vault status
+
+        MONGODB_URI="$(vault kv get -field=mongodb_uri secret/nodegoat)"
+        COOKIE_SECRET="$(vault kv get -field=cookie_secret secret/nodegoat)"
+        CRYPTO_KEY="$(vault kv get -field=crypto_key secret/nodegoat)"
+        USERS_TO_INSERT="$(vault kv get -field=users_to_insert secret/nodegoat | jq -c .)"
+
+        {
+          printf 'MONGODB_URI=%s\n' "$MONGODB_URI"
+          printf 'COOKIE_SECRET=%s\n' "$COOKIE_SECRET"
+          printf 'CRYPTO_KEY=%s\n' "$CRYPTO_KEY"
+          printf 'USERS_TO_INSERT=%s\n' "$USERS_TO_INSERT"
+          printf 'NODE_ENV=development\n'
+        } > .env.ci
+
+        unset MONGODB_URI
+        unset COOKIE_SECRET
+        unset CRYPTO_KEY
+        unset USERS_TO_INSERT
+
+        echo "Secrets loaded from persistent Vault."
+
+    - name: Start NodeGoat
+      run: |
+        docker compose --env-file .env.ci up -d --build
+
+    - name: Wait for NodeGoat
+      run: |
+        for i in {1..60}; do
+          if curl -fsS http://127.0.0.1:4000/ > /dev/null; then
+            echo "NodeGoat is ready."
+            exit 0
+          fi
+
+          echo "Waiting for NodeGoat..."
+          sleep 2
+        done
+
+        echo "NodeGoat failed to start."
+        docker compose logs
+        exit 1
+
+    - name: Run OWASP ZAP
+      run: |
+        mkdir -p zap-reports
+
+        docker run --rm \
+          --network host \
+          -v "$PWD/zap-reports:/zap/wrk/:rw" \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-baseline.py \
+          -t http://127.0.0.1:4000 \
+          -r zap-report.html \
+          -J zap-report.json \
+          -I
+
+    - name: Upload ZAP report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: nodegoat-zap-report
+        path: zap-reports/
+
+    - name: Cleanup
+      if: always()
+      run: |
+        docker compose down -v
+        rm -f .env.ci
