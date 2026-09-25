@@ -93,26 +93,20 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: '1'
 
-vault-test:
-  runs-on: self-hosted
-
-  steps:
-    - name: Test persistent Vault
-      env:
-        VAULT_ADDR: http://127.0.0.1:8200
-        VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
-      run: |
-        echo "Checking Vault..."
-        vault status
-
-        echo "Checking CI token..."
-        vault token lookup
-
-        echo "Checking secret access..."
-        vault kv get -field=cookie_secret secret/nodegoat > /tmp/test-secret
-
-        test -s /tmp/test-secret
-
-        rm -f /tmp/test-secret
-
-        echo "Vault integration successful."
+  vault-test:
+    runs-on: self-hosted
+    steps:
+      - name: Test persistent Vault
+        env:
+          VAULT_ADDR: http://127.0.0.1:8200
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+        run: |
+          echo "Checking Vault..."
+          vault status
+          echo "Checking CI token..."
+          vault token lookup
+          echo "Checking secret access..."
+          vault kv get -field=cookie_secret secret/nodegoat > /tmp/test-secret
+          test -s /tmp/test-secret
+          rm -f /tmp/test-secret
+          echo "Vault integration successful."
