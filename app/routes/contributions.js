@@ -30,9 +30,9 @@ function ContributionsHandler(db) {
         /*jslint evil: true */
         // Insecure use of eval() to parse inputs
 	// added ,10 after .pretax .afterTax .roth and removed the eval then added the praseInt
-        const preTax = praseInt(req.body.preTax, 10);
-        const afterTax = praseint(req.body.afterTax, 10);
-        const roth = praseInt(req.body.roth, 10);
+        const preTax = parseInt(req.body.preTax, 10);
+        const afterTax = parseInt(req.body.afterTax, 10);
+        const roth = parseInt(req.body.roth, 10);
 
         /*
         //Fix for A1 -1 SSJS Injection attacks - uses alternate method to eval
